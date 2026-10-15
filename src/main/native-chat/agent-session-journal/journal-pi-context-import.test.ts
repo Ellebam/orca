@@ -62,7 +62,7 @@ describe('saved Pi context import', () => {
         }
       ])
       expect(items).toHaveLength(1)
-      expect(items[0]?.identity.recordId).toBe('first')
+      expect(items[0]?.identity).toMatchObject({ provider: 'legacy', recordId: 'first' })
       expect(warn).toHaveBeenCalledWith(
         '[journal-pi-import] temporary database close failed:',
         expect.objectContaining({ message: 'test teardown failure' })
