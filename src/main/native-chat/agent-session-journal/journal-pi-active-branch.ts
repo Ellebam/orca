@@ -1,12 +1,17 @@
-import { mkdtempSync, rmSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
 import { performance } from 'node:perf_hooks'
 import type { AgentJournalItemIdentity } from '../../../shared/agent-session-journal-types'
 import type { NativeChatMessage } from '../../../shared/native-chat-types'
 import { asRecord, parseJsonObject, timestampMs } from '../../ai-vault/session-scanner-values'
 import Database from '../../sqlite/sync-database'
 import { decodeOmpTranscriptLine } from '../transcript-line-decoders-omp'
+
+function closePiImportDatabase(db: Database.Database | null): void {
+  try {
+    db?.close()
+  } catch (error) {
+    console.warn('[journal-pi-import] temporary database close failed:', error)
+  }
+}
 
 /** Keep the complete Pi tree on disk until its saved leaf identifies the active branch. */
 export function createPiTranscriptCollector<T>(
@@ -17,13 +22,12 @@ export function createPiTranscriptCollector<T>(
   project(keep: (item: T) => void): Promise<void>
   close(): void
 } {
-  const directory = mkdtempSync(join(tmpdir(), 'orca-pi-import-'))
   let db: Database.Database
   let opened: Database.Database | null = null
   let insert: Database.Statement
   let byFileIndex: Database.Statement
   try {
-    opened = new Database(join(directory, 'branch.sqlite'))
+    opened = new Database('')
     db = opened
     db.exec(`
       PRAGMA journal_mode = OFF;
@@ -49,11 +53,7 @@ export function createPiTranscriptCollector<T>(
     byFileIndex = db.prepare('SELECT id FROM entries WHERE file_index = ?')
     db.exec('BEGIN')
   } catch (error) {
-    try {
-      opened?.close()
-    } finally {
-      rmSync(directory, { recursive: true, force: true })
-    }
+    closePiImportDatabase(opened)
     throw error
   }
   let fileIndex = 0
@@ -206,11 +206,7 @@ export function createPiTranscriptCollector<T>(
         return
       }
       closed = true
-      try {
-        db.close()
-      } finally {
-        rmSync(directory, { recursive: true, force: true })
-      }
+      closePiImportDatabase(db)
     }
   }
 }

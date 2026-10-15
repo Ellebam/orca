@@ -1,7 +1,8 @@
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import Database from '../../sqlite/sync-database'
 import {
   importLegacyTranscriptIntoJournal,
   prepareLegacyTranscriptImport
@@ -42,6 +43,36 @@ async function prepare(entries: unknown[], version = 3) {
 }
 
 describe('saved Pi context import', () => {
+  it('keeps prepared history when temporary database teardown reports an error', async () => {
+    const close = Database.prototype.close
+    const closeSpy = vi.spyOn(Database.prototype, 'close').mockImplementation(function (
+      this: Database.Database
+    ) {
+      close.call(this)
+      throw new Error('test teardown failure')
+    })
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    try {
+      const items = await prepare([
+        {
+          type: 'message',
+          id: 'first',
+          parentId: null,
+          message: { role: 'user', content: 'hello' }
+        }
+      ])
+      expect(items).toHaveLength(1)
+      expect(items[0]?.identity.recordId).toBe('first')
+      expect(warn).toHaveBeenCalledWith(
+        '[journal-pi-import] temporary database close failed:',
+        expect.objectContaining({ message: 'test teardown failure' })
+      )
+    } finally {
+      closeSpy.mockRestore()
+      warn.mockRestore()
+    }
+  })
+
   it('lets the event loop run while projecting a large active branch', async () => {
     const collector = createPiTranscriptCollector(
       (message) => message.id,
