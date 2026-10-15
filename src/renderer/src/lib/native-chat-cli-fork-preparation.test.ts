@@ -28,6 +28,8 @@ const source = {
   executionHostPlatform: 'linux'
 }
 const options = { pairingRevision: 7, isCurrent: () => true, signal: new AbortController().signal }
+const delayed = <T>(value: T, ms: number) =>
+  new Promise<T>((resolve) => setTimeout(() => resolve(value), ms))
 
 it('negotiates then prepares on the same paired host without requesting History', async () => {
   call
@@ -102,34 +104,19 @@ it.each([true, false])(
       capabilities: modern ? [AI_VAULT_CHAT_FORK_SOURCE_CAPABILITY] : []
     })
     if (!modern) {
-      call.mockImplementationOnce(
-        () =>
-          new Promise((resolve) =>
-            setTimeout(
-              () =>
-                resolve({
-                  sessions: [
-                    {
-                      ...source,
-                      agent: 'codex',
-                      codexHome: '/host/codex-runtime-home/home',
-                      executionHostId: 'runtime:peer',
-                      messageCount: 1,
-                      queuedMessageCount: 0,
-                      structuredSession: { sessionId: 'chat-1', workspaceId: 'workspace-1' }
-                    }
-                  ]
-                }),
-              45_000
-            )
-          )
-      )
+      const row = {
+        ...source,
+        agent: 'codex',
+        codexHome: '/host/codex-runtime-home/home',
+        executionHostId: 'runtime:peer',
+        messageCount: 1,
+        queuedMessageCount: 0,
+        structuredSession: { sessionId: 'chat-1', workspaceId: 'workspace-1' }
+      }
+      call.mockImplementationOnce(() => delayed({ sessions: [row] }, 45_000))
     }
-    call.mockImplementationOnce(
-      () =>
-        new Promise((resolve) =>
-          setTimeout(() => resolve({ useRealCodexHome: false, cliForkSource: source }), 40_000)
-        )
+    call.mockImplementationOnce(() =>
+      delayed({ useRealCodexHome: false, cliForkSource: source }, 40_000)
     )
     const result = prepareNativeChatCliFork(subject, options)
     await vi.advanceTimersByTimeAsync(modern ? 40_000 : 85_000)
@@ -138,7 +125,7 @@ it.each([true, false])(
   }
 )
 
-it('bounds legacy inventory observation at150seconds and revokes its queued signal', async () => {
+it('bounds legacy inventory observation at 150 seconds and revokes its queued signal', async () => {
   vi.useFakeTimers()
   call
     .mockResolvedValueOnce({ capabilities: [] })
