@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { RuntimeRpcResponse } from '../../../shared/runtime-rpc-envelope'
+import type { WebRuntimeSubscriptionCallbacks } from './web-runtime-subscription-contract'
 import {
   installBrowserGlobals,
   writeStoredRuntimeEnvironment
@@ -184,6 +185,70 @@ describe('web preload runtime calls', () => {
     await Promise.all(blockers)
     await refused
     expect(call).toHaveBeenCalledTimes(8)
+  })
+
+  it('revokes an unsent subscription on source abort and refuses responses from a replaced pairing', async () => {
+    let release = () => {}
+    const blocked = new Promise<RuntimeRpcResponse<unknown>>((resolve) => {
+      release = () =>
+        resolve({ id: 'b', ok: true, result: null, _meta: { runtimeId: 'runtime-a' } })
+    })
+    const subscribe = vi.fn(
+      async (_method: string, _params: unknown, callbacks: WebRuntimeSubscriptionCallbacks) => {
+        response = callbacks.onResponse
+        return { unsubscribe: vi.fn(), sendBinary: vi.fn() }
+      }
+    )
+    let response = (_value: RuntimeRpcResponse<unknown>) => {}
+    vi.doMock('./web-runtime-client', () => ({
+      WebRuntimeClient: class {
+        call = () => blocked
+        subscribe = subscribe
+        close(): void {}
+      }
+    }))
+    const globals = installBrowserGlobals('Linux')
+    writeStoredRuntimeEnvironment(globals.storage, 'web-server-a')
+    const { installWebPreloadApi } = await import('./web-preload-api')
+    const { callAbortableRuntimeEnvironment } =
+      await import('@/runtime/abortable-runtime-environment-call')
+    const { webRuntimeState } = await import('./preload-api/web-runtime-session')
+    installWebPreloadApi()
+    const environment = webRuntimeState.activeEnvironment!
+    const revision = environment.pairingRevision ?? environment.createdAt
+    const blockers = Array.from({ length: 8 }, () =>
+      globals.window.api.runtime.call({ method: 'blocker' })
+    )
+    const source = new AbortController()
+    const cancelled = expect(
+      callAbortableRuntimeEnvironment(
+        'web-server-a',
+        'aiVault.prepareSessionResume',
+        {},
+        90_000,
+        source.signal,
+        revision
+      )
+    ).rejects.toThrow('aborted')
+    source.abort()
+    await cancelled
+    release()
+    await Promise.all(blockers)
+    expect(subscribe).not.toHaveBeenCalled()
+    const refused = expect(
+      callAbortableRuntimeEnvironment(
+        'web-server-a',
+        'aiVault.prepareSessionResume',
+        {},
+        90_000,
+        new AbortController().signal,
+        revision
+      )
+    ).rejects.toThrow('paired Orca server changed')
+    await vi.waitFor(() => expect(subscribe).toHaveBeenCalledTimes(1))
+    webRuntimeState.activeEnvironment = { ...environment, pairingRevision: revision + 1 }
+    response({ id: 'prepare', ok: true, result: {}, _meta: { runtimeId: 'old' } })
+    await refused
   })
 
   it('does not spend a selected call timeout while queued and forwards it unchanged', async () => {

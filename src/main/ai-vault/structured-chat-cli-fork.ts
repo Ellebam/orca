@@ -16,6 +16,45 @@ import { structuredAgentRuntimeRegistration } from '../runtime/structured-agent-
 import { readPiSessionHeader } from '../pi/rpc-launch-resolution'
 import { copyStructuredChatRecordConversation } from './structured-chat-conversation-copy'
 import { isAiVaultAgent } from './session-list-result-validation'
+import type { AgentJournalSnapshot } from '../../shared/agent-session-journal-types'
+import {
+  agentJournalSubmissionKey,
+  parseAgentJournalItemKey
+} from '../../shared/agent-session-journal-item-key'
+
+function assertNativeConversationContent(snapshot: AgentJournalSnapshot): void {
+  const submissions = new Map(
+    snapshot.submissions.map((submission) => [
+      agentJournalSubmissionKey(submission.clientMessageId),
+      submission
+    ])
+  )
+  let uncertain = false
+  const hasContent = snapshot.items.some(({ itemId, body }) => {
+    if (body.kind !== 'message' || (body.role !== 'user' && body.role !== 'assistant')) {
+      return false
+    }
+    const identity = parseAgentJournalItemKey(itemId)
+    const submission = submissions.get(itemId)
+    if (submission?.dispatchState === 'accepted' || (identity && identity.provider !== 'orca')) {
+      return true
+    }
+    // Write-ahead messages alone prove neither provider content nor failed delivery.
+    uncertain ||=
+      !submission ||
+      submission.dispatchState === 'unknown' ||
+      (submission.dispatchState === 'pending' &&
+        (!submission.handoverRecorded || submission.handedOverAt !== undefined))
+    return false
+  })
+  if (!hasContent) {
+    throw new Error(
+      uncertain
+        ? 'Could not confirm this conversation was saved. Try again after the agent responds.'
+        : 'This chat has no saved conversation to copy.'
+    )
+  }
+}
 
 /** Prepares the record's current conversation on its execution host, without a History inventory. */
 export async function prepareStructuredChatCliFork(
@@ -49,6 +88,7 @@ export async function prepareStructuredChatCliFork(
   if (!providerSessionId.trim()) {
     throw new Error('This chat has no saved conversation to copy.')
   }
+  assertNativeConversationContent(await host.journalSnapshot(record.sessionId))
   if (agentForksThroughChat(agent)) {
     const result = await copyStructuredChatRecordConversation(record, providerSessionId)
     const copy = result.forkedSession

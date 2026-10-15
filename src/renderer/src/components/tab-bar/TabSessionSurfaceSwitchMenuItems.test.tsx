@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import { useSyncExternalStore } from 'react'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
@@ -20,6 +21,8 @@ const mocks = vi.hoisted(() => {
   } = { subject: null, move: null, launchActionArgs: [] }
   return {
     ...state,
+    pending: false,
+    pendingListeners: new Set<() => void>(),
     handleResumeInNewChat: vi.fn(),
     handleResumeInNewCli: vi.fn(),
     resolveSwitch: vi.fn(),
@@ -31,7 +34,14 @@ const mocks = vi.hoisted(() => {
 
 vi.mock('./native-chat-cli-fork-run', () => ({
   runNativeChatCliFork: mocks.runNativeChatCliFork,
-  useNativeChatCliForkPending: () => false
+  useNativeChatCliForkPending: () =>
+    useSyncExternalStore(
+      (listener) => {
+        mocks.pendingListeners.add(listener)
+        return () => mocks.pendingListeners.delete(listener)
+      },
+      () => mocks.pending
+    )
 }))
 
 vi.mock('../../store', () => ({
@@ -109,6 +119,8 @@ function listResult(sessions: AiVaultSession[]) {
 beforeEach(() => {
   resetAiVaultForcedRescanThrottleForTest()
   mocks.subject = null
+  mocks.pending = false
+  mocks.runNativeChatCliFork.mockReset()
   mocks.move = null
   mocks.launchActionArgs = []
   mocks.handleResumeInNewChat.mockReset()
@@ -260,4 +272,18 @@ describe('TabSessionSurfaceSwitchMenuItems', () => {
       requestToken: expect.any(String)
     })
   })
+})
+
+it('keeps an accepted native action visible with shared disabled spinner feedback', async () => {
+  mocks.subject = CHAT_SUBJECT
+  mocks.runNativeChatCliFork.mockImplementation(() => {
+    mocks.pending = true
+    mocks.pendingListeners.forEach((listener) => listener())
+  })
+  await renderItems('orca-chat-1')
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Resume in New CLI' }))
+  const item = screen.getByRole('menuitem', { name: 'Resume in New CLI' })
+  expect(item.getAttribute('aria-busy')).toBe('true')
+  expect(item.getAttribute('data-disabled')).not.toBeNull()
+  expect(item.querySelector('.animate-spin')).not.toBeNull()
 })

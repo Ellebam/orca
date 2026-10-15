@@ -16,6 +16,7 @@ import {
   type TabSessionHistorySubject
 } from '@/components/tab-bar/tab-session-history-switch'
 import type { AiVaultResumeCommandSession } from './ai-vault-resume-command'
+import { waitForPromiseWithSignal } from '../../../shared/abort-signal-reason'
 
 export type NativeChatCliForkSubject = Extract<TabSessionHistorySubject, { kind: 'chat' }>
 export type NativeChatCliForkPreparation = {
@@ -26,7 +27,7 @@ export type NativeChatCliForkPreparation = {
 
 export async function prepareNativeChatCliFork(
   subject: NativeChatCliForkSubject,
-  options: { pairingRevision?: number; isCurrent: () => boolean }
+  options: { pairingRevision?: number; isCurrent: () => boolean; signal: AbortSignal }
 ): Promise<NativeChatCliForkPreparation> {
   const hostId = subject.request.executionHostScope
   const host = parseExecutionHostId(hostId)
@@ -37,24 +38,46 @@ export async function prepareNativeChatCliFork(
     host.kind === 'runtime'
       ? { kind: 'environment' as const, environmentId: host.environmentId }
       : { kind: 'local' as const }
-  const callOptions = {
-    timeoutMs: 30_000,
-    expectedEnvironmentPairingRevision: options.pairingRevision
+  const observe = async <T>(timeoutMs: number, run: (signal: AbortSignal) => Promise<T>) => {
+    const deadline = new AbortController()
+    const timer = setTimeout(
+      () => deadline.abort(new Error('Conversation preparation timed out.')),
+      timeoutMs
+    )
+    const signal = AbortSignal.any([options.signal, deadline.signal])
+    try {
+      signal.throwIfAborted()
+      if (!options.isCurrent()) {
+        throw new Error('The source chat changed before preparation.')
+      }
+      return await waitForPromiseWithSignal(run(signal), signal)
+    } finally {
+      clearTimeout(timer)
+    }
   }
+  const callOptions = (timeoutMs: number, signal: AbortSignal) => ({
+    timeoutMs,
+    signal,
+    expectedEnvironmentPairingRevision: options.pairingRevision
+  })
   const request = (args: AiVaultPrepareSessionResumeRequest) =>
-    host.kind === 'local'
-      ? window.api.aiVault.prepareSessionResume(args)
-      : callRuntimeRpc<AiVaultPrepareSessionResumeResult>(
-          target,
-          'aiVault.prepareSessionResume',
-          args,
-          callOptions
-        )
+    observe(90_000, (signal) =>
+      host.kind === 'local'
+        ? window.api.aiVault.prepareSessionResume(args)
+        : callRuntimeRpc<AiVaultPrepareSessionResumeResult>(
+            target,
+            'aiVault.prepareSessionResume',
+            args,
+            callOptions(90_000, signal)
+          )
+    )
   // Local desktop and host ship together; only a paired peer needs negotiation.
   const modern =
     host.kind === 'local' ||
     (
-      await callRuntimeRpc<RuntimeStatus>(target, 'status.get', undefined, callOptions)
+      await observe(30_000, (signal) =>
+        callRuntimeRpc<RuntimeStatus>(target, 'status.get', undefined, callOptions(30_000, signal))
+      )
     ).capabilities?.includes(AI_VAULT_CHAT_FORK_SOURCE_CAPABILITY) === true
   if (!options.isCurrent()) {
     throw new Error('The source chat changed before preparation.')
@@ -70,14 +93,16 @@ export async function prepareNativeChatCliFork(
     )
   }
   // Old peers alone need one same-host inventory; never force a rescan or retry a modern error.
-  const listed = await callRuntimeRpc<AiVaultListResult>(
-    target,
-    'aiVault.listSessions',
-    {
-      ...aiVaultSessionListArgs(subject.request, { requestToken: createBrowserUuid() }),
-      executionHostId: host.id
-    },
-    callOptions
+  const listed = await observe(150_000, (signal) =>
+    callRuntimeRpc<AiVaultListResult>(
+      target,
+      'aiVault.listSessions',
+      {
+        ...aiVaultSessionListArgs(subject.request, { requestToken: createBrowserUuid() }),
+        executionHostId: host.id
+      },
+      callOptions(150_000, signal)
+    )
   )
   if (!options.isCurrent()) {
     throw new Error('The source chat changed before preparation.')

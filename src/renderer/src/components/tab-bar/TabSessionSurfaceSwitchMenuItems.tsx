@@ -122,6 +122,7 @@ function HistoryTabSessionSurfaceSwitchMenuItems({
 }
 
 export function TabSessionSurfaceSwitchMenuItems(props: {
+  onComplete?: () => void
   tab: Pick<TerminalTab, 'id' | 'worktreeId'>
   nativeChat?: NativeChatTabSession
   leadingSeparator: boolean

@@ -48,6 +48,16 @@ export async function callRuntimeEnvelope<TResult = unknown>(
   return response as RuntimeRpcResponse<TResult>
 }
 
+export function assertEnvironmentPairing(selector: string, expectedRevision?: number): void {
+  const current = resolveEnvironment(selector)
+  if (
+    expectedRevision !== undefined &&
+    (current.pairingRevision ?? current.createdAt) !== expectedRevision
+  ) {
+    throw new Error('The paired Orca server changed while the request was in progress.')
+  }
+}
+
 export async function callEnvironmentEnvelope<TResult = unknown>(
   selector: string,
   method: string,
@@ -56,15 +66,7 @@ export async function callEnvironmentEnvelope<TResult = unknown>(
   expectedEnvironmentPairingRevision?: number
 ): Promise<RuntimeRpcResponse<TResult>> {
   const environment = resolveEnvironment(selector)
-  const assertPairing = () => {
-    const current = resolveEnvironment(selector)
-    if (
-      expectedEnvironmentPairingRevision !== undefined &&
-      (current.pairingRevision ?? current.createdAt) !== expectedEnvironmentPairingRevision
-    ) {
-      throw new Error('The paired Orca server changed while the request was in progress.')
-    }
-  }
+  const assertPairing = () => assertEnvironmentPairing(selector, expectedEnvironmentPairingRevision)
   assertPairing()
   if (manuallyDisconnectedEnvironmentIds.has(environment.id)) {
     return manuallyDisconnectedResponse(environment)

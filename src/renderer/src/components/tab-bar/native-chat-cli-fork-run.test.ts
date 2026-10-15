@@ -10,6 +10,8 @@ const mocks = vi.hoisted(() => ({
   prepare: vi.fn(),
   launch: vi.fn(),
   notify: vi.fn(),
+  activate: vi.fn(),
+  activeWorktreeId: 'workspace-1',
   error: vi.fn(),
   open: true,
   host: 'runtime:peer',
@@ -18,6 +20,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/store', () => ({
   useAppStore: {
     getState: () => ({
+      activeWorktreeId: mocks.activeWorktreeId,
       unifiedTabsByWorktree: {
         'workspace-1': mocks.open
           ? [{ id: 'tab-1', contentType: 'agent-session', entityId: 'chat-1' }]
@@ -44,6 +47,10 @@ vi.mock('@/lib/ai-vault-session-fork-startup', () => ({
   buildAiVaultForkStartupForWorktree: () => ({ command: 'claude --resume source --fork-session' }),
   buildAiVaultCopiedSessionStartupForWorktree: () => ({ command: 'omp --resume copy' })
 }))
+vi.mock('../right-sidebar/ai-vault-session-resume-in-chat-launch', () => ({
+  activateAiVaultResumeWorkspace: mocks.activate
+}))
+vi.mock('sonner', () => ({ toast: { error: mocks.error } }))
 vi.mock('@/lib/launch-ai-vault-session', () => ({ launchAiVaultSessionInNewTab: mocks.launch }))
 vi.mock('../right-sidebar/ai-vault-session-launch-feedback', () => ({
   notifyAiVaultSessionQueued: mocks.notify,
@@ -63,6 +70,8 @@ const prepared: NativeChatCliForkPreparation = {
 }
 beforeEach(() => {
   mocks.open = true
+  mocks.activeWorktreeId = 'workspace-1'
+  mocks.activate.mockReset()
   mocks.prepare.mockReset()
   mocks.launch.mockReset().mockReturnValue({ tabId: 'destination' })
   mocks.notify.mockReset()
@@ -120,4 +129,23 @@ it('lets the destination finish after dispatch and passes no source resume ident
   })
   expect(mocks.notify).toHaveBeenCalledWith('claude')
   expect(mocks.error).not.toHaveBeenCalled()
+})
+
+it('reveals the successful source workspace after another workspace was selected', async () => {
+  mocks.prepare.mockImplementation(async () => {
+    mocks.activeWorktreeId = 'workspace-2'
+    return prepared
+  })
+  await runNativeChatCliFork(args)
+  expect(mocks.activate).toHaveBeenCalledExactlyOnceWith('workspace-1')
+  mocks.activate.mockClear()
+  mocks.notify.mockClear()
+  mocks.launch.mockReturnValue({
+    tabId: null,
+    runtimeLaunch: Promise.resolve({ status: 'failed', message: 'refused' })
+  })
+  await runNativeChatCliFork(args)
+  expect(mocks.activate).not.toHaveBeenCalled()
+  expect(mocks.notify).not.toHaveBeenCalled()
+  expect(mocks.error).toHaveBeenCalledTimes(1)
 })

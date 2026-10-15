@@ -2,7 +2,6 @@ import { useSyncExternalStore } from 'react'
 import { useAppStore } from '@/store'
 import { readIpcErrorMessage } from '@/lib/ipc-error'
 import { parseExecutionHostId } from '../../../../shared/execution-host'
-import { waitForPromiseWithSignal } from '../../../../shared/abort-signal-reason'
 import {
   prepareNativeChatCliFork,
   type NativeChatCliForkSubject
@@ -12,11 +11,8 @@ import {
   buildAiVaultCopiedSessionStartupForWorktree,
   buildAiVaultForkStartupForWorktree
 } from '@/lib/ai-vault-session-fork-startup'
-import { launchAiVaultSessionInNewTab } from '@/lib/launch-ai-vault-session'
-import {
-  notifyAiVaultSessionQueued,
-  notifyAiVaultSessionPreparationFailure
-} from '../right-sidebar/ai-vault-session-launch-feedback'
+import { launchAiVaultSessionAndReveal } from '@/lib/launch-ai-vault-session-and-reveal'
+import { notifyAiVaultSessionPreparationFailure } from '../right-sidebar/ai-vault-session-launch-feedback'
 import { describeAiVaultCliForkFailure } from '../right-sidebar/ai-vault-session-cli-fork'
 import {
   captureWebSessionIntentOwner,
@@ -51,6 +47,7 @@ export async function runNativeChatCliFork(args: {
   subject: NativeChatCliForkSubject
   tab: { id: string; worktreeId: string }
   agent: AiVaultAgent
+  onComplete?: () => void
   commandOverrides?: Partial<Record<AiVaultAgent, string | null>>
 }): Promise<void> {
   const { subject, tab } = args
@@ -111,15 +108,12 @@ export async function runNativeChatCliFork(args: {
     stopRetirement()
     stopRevision()
   }
-  const timer = setTimeout(
-    () => controller.abort(new Error('Conversation preparation timed out.')),
-    30_000
-  )
   try {
-    const prepared = await waitForPromiseWithSignal(
-      prepareNativeChatCliFork(subject, { pairingRevision: owner?.pairingRevision, isCurrent }),
-      controller.signal
-    )
+    const prepared = await prepareNativeChatCliFork(subject, {
+      pairingRevision: owner?.pairingRevision,
+      isCurrent,
+      signal: controller.signal
+    })
     if (!isCurrent()) {
       return
     }
@@ -142,19 +136,10 @@ export async function runNativeChatCliFork(args: {
       return
     }
     stop()
-    clearTimeout(timer)
-    const launch = launchAiVaultSessionInNewTab({
-      agent: target.agent,
-      worktreeId: subject.workspaceId,
-      ...startup
-    })
-    if (launch.tabId === null) {
-      const outcome = await launch.runtimeLaunch
-      if (outcome.status === 'failed') {
-        throw new Error(outcome.message)
-      }
-    }
-    notifyAiVaultSessionQueued(target.agent)
+    await launchAiVaultSessionAndReveal(
+      { agent: target.agent, worktreeId: subject.workspaceId, ...startup },
+      describeAiVaultCliForkFailure
+    )
   } catch (error) {
     if (pending.get(key) === controller) {
       notifyAiVaultSessionPreparationFailure(
@@ -164,8 +149,8 @@ export async function runNativeChatCliFork(args: {
       )
     }
   } finally {
-    clearTimeout(timer)
     stop()
     release()
+    args.onComplete?.()
   }
 }

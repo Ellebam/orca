@@ -4,6 +4,8 @@ import { tmpdir } from 'node:os'
 import { afterEach, expect, it, vi } from 'vitest'
 import { agentSessionRecordFixture } from '../../shared/agent-session-record.test-fixture'
 import type { AgentSessionRecord } from '../../shared/agent-session-record'
+import type { AgentJournalSnapshot } from '../../shared/agent-session-journal-types'
+import { agentJournalSubmissionKey } from '../../shared/agent-session-journal-item-key'
 import { setStructuredAgentSessionHost } from '../native-chat/agent-session-wire/structured-agent-session-registry'
 import { prepareStructuredChatCliFork } from './structured-chat-cli-fork'
 import { prepareLegacySharedCodexSessionResume } from '../codex/codex-legacy-session-resume'
@@ -15,9 +17,26 @@ const request = {
   fork: true
 } as const
 const prepare = vi.fn(async () => ({ useRealCodexHome: false }))
-function install(record: AgentSessionRecord, copy = vi.fn()) {
+function savedJournal(): AgentJournalSnapshot {
+  return {
+    sessionId: 'session-alpha-1',
+    cursor: { epoch: 'e', sequence: 1 },
+    submissions: [],
+    items: [
+      {
+        itemId: 'legacy:pi:source:user-1',
+        revision: 0,
+        sequence: 1,
+        observedAt: 1,
+        body: { kind: 'message', role: 'user', blocks: [{ type: 'text', text: 'Saved prompt' }] }
+      }
+    ]
+  }
+}
+function install(record: AgentSessionRecord, copy = vi.fn(), journal = savedJournal()) {
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: preparation reads only these host dependencies.
   setStructuredAgentSessionHost({
+    journalSnapshot: async () => journal,
     deps: {
       store: { getRecord: () => record, listRecords: () => [record] },
       adapter: { copyConversation: copy },
@@ -123,10 +142,43 @@ it('uses the Pi file handle and refuses a mismatched saved header or missing han
     filePath,
     `${JSON.stringify({ type: 'session', id: '12345678-abcd-1234-abcd-123456789abc', cwd: root })}\n`
   )
-  install(record)
+  const journal = savedJournal()
+  const savedMessage = journal.items.splice(0)
+  install(record, vi.fn(), journal)
+  await expect(prepareStructuredChatCliFork(request, prepare)).rejects.toThrow(
+    'no saved conversation'
+  )
+  expect(prepare).not.toHaveBeenCalled()
+  await writeFile(
+    filePath,
+    `${JSON.stringify({ type: 'session', id: '12345678-abcd-1234-abcd-123456789abc', cwd: root })}\n${JSON.stringify({ type: 'message', id: 'user-1', parentId: null, message: { role: 'user', content: [{ type: 'text', text: 'Saved prompt' }], timestamp: 1 } })}\n`
+  )
+  journal.items.push(...savedMessage)
   await expect(prepareStructuredChatCliFork(request, prepare)).resolves.toMatchObject({
     cliForkSource: { filePath, sessionId: '12345678-abcd-1234-abcd-123456789abc' }
   })
+  journal.items[0]!.itemId = agentJournalSubmissionKey('send-1')
+  for (const dispatchState of ['pending', 'rejected', 'unknown', 'accepted'] as const) {
+    journal.submissions = [
+      {
+        clientMessageId: 'send-1',
+        fence: 1,
+        payloadFingerprint: 'p',
+        dispatchState,
+        providerItemId: null,
+        reason: null,
+        submittedAt: 1,
+        resolvedAt: null,
+        handoverRecorded: true
+      }
+    ]
+    const preparation = prepareStructuredChatCliFork(request, prepare)
+    await (dispatchState === 'accepted'
+      ? expect(preparation).resolves.toHaveProperty('cliForkSource')
+      : expect(preparation).rejects.toThrow(
+          dispatchState === 'unknown' ? 'Could not confirm' : 'no saved conversation'
+        ))
+  }
   await writeFile(filePath, `${JSON.stringify({ type: 'session', id: 'wrong', cwd: root })}\n`)
   await expect(prepareStructuredChatCliFork(request, prepare)).rejects.toThrow('does not match')
   record.providerHandleChain = []

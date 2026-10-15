@@ -9,6 +9,7 @@ const { call } = vi.hoisted(() => ({ call: vi.fn() }))
 vi.mock('@/runtime/runtime-rpc-client', () => ({ callRuntimeRpc: call }))
 afterEach(() => {
   call.mockReset()
+  vi.useRealTimers()
   vi.unstubAllGlobals()
 })
 const subject: NativeChatCliForkSubject = {
@@ -26,7 +27,7 @@ const source = {
   codexHome: null,
   executionHostPlatform: 'linux'
 }
-const options = { pairingRevision: 7, isCurrent: () => true }
+const options = { pairingRevision: 7, isCurrent: () => true, signal: new AbortController().signal }
 
 it('negotiates then prepares on the same paired host without requesting History', async () => {
   call
@@ -77,14 +78,74 @@ it('asks an old peer for one bounded same-host list and does not scan twice when
   })
   expect(call.mock.calls[1]?.[3]).toMatchObject({
     expectedEnvironmentPairingRevision: 7,
-    timeoutMs: 30_000
+    timeoutMs: 150_000
   })
 })
 
 it('does not prepare when the source retires during capability admission', async () => {
-  call.mockResolvedValueOnce({ capabilities: [AI_VAULT_CHAT_FORK_SOURCE_CAPABILITY] })
+  let current = true
+  call.mockImplementationOnce(async () => {
+    current = false
+    return { capabilities: [AI_VAULT_CHAT_FORK_SOURCE_CAPABILITY] }
+  })
   await expect(
-    prepareNativeChatCliFork(subject, { ...options, isCurrent: () => false })
+    prepareNativeChatCliFork(subject, { ...options, isCurrent: () => current })
   ).rejects.toThrow('source chat changed')
   expect(call).toHaveBeenCalledTimes(1)
+})
+
+it.each([true, false])(
+  'preserves delayed modern=%s preparation within its phase budgets',
+  async (modern) => {
+    vi.useFakeTimers()
+    call.mockResolvedValueOnce({
+      capabilities: modern ? [AI_VAULT_CHAT_FORK_SOURCE_CAPABILITY] : []
+    })
+    if (!modern) {
+      call.mockImplementationOnce(
+        () =>
+          new Promise((resolve) =>
+            setTimeout(
+              () =>
+                resolve({
+                  sessions: [
+                    {
+                      ...source,
+                      agent: 'codex',
+                      codexHome: '/host/codex-runtime-home/home',
+                      executionHostId: 'runtime:peer',
+                      messageCount: 1,
+                      queuedMessageCount: 0,
+                      structuredSession: { sessionId: 'chat-1', workspaceId: 'workspace-1' }
+                    }
+                  ]
+                }),
+              45_000
+            )
+          )
+      )
+    }
+    call.mockImplementationOnce(
+      () =>
+        new Promise((resolve) =>
+          setTimeout(() => resolve({ useRealCodexHome: false, cliForkSource: source }), 40_000)
+        )
+    )
+    const result = prepareNativeChatCliFork(subject, options)
+    await vi.advanceTimersByTimeAsync(modern ? 40_000 : 85_000)
+    await expect(result).resolves.toMatchObject({ session: { sessionId: 'provider-1' } })
+    expect(vi.getTimerCount()).toBe(0)
+  }
+)
+
+it('bounds legacy inventory observation at150seconds and revokes its queued signal', async () => {
+  vi.useFakeTimers()
+  call
+    .mockResolvedValueOnce({ capabilities: [] })
+    .mockImplementationOnce(() => new Promise(() => {}))
+  const failed = expect(prepareNativeChatCliFork(subject, options)).rejects.toThrow('timed out')
+  await vi.advanceTimersByTimeAsync(150_000)
+  await failed
+  expect(call.mock.calls[1]?.[3].signal.aborted).toBe(true)
+  expect(vi.getTimerCount()).toBe(0)
 })
