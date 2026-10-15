@@ -80,7 +80,8 @@ export type PreparationSelection<T> =
  * The bound matters: refs outside the same branch family are rejected, because a retarget across
  * unrelated history degenerates into a full checkout and wins nothing.
  *
- * Only a materialized checkout is claimable, so a create never waits on a build or tip refresh.
+ * Only a built checkout is claimable; a match still building is returned as `not-ready` so the
+ * caller cancels it instead of waiting.
  *
  * Synchronous on purpose: the caller claims the returned entry in the same run, so two concurrent
  * creates cannot both walk away with the same prepared checkout.
