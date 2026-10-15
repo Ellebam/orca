@@ -13,6 +13,8 @@ import type { WorktreeRemovalTarget } from '../../../../shared/worktree/removal'
 import type { Worktree } from '../../../../shared/worktree/types'
 
 const mocks = vi.hoisted(() => {
+  const projects: Project[] = []
+  const projectHostSetups: ProjectHostSetup[] = []
   const state = {
     activeModal: 'delete-worktree',
     modalData: {} as Record<string, unknown>,
@@ -21,8 +23,8 @@ const mocks = vi.hoisted(() => {
     clearWorktreeDeleteState: vi.fn(),
     allWorktrees: vi.fn<() => Worktree[]>(() => []),
     repos: [] as Repo[],
-    projects: [] as Project[],
-    projectHostSetups: [] as ProjectHostSetup[],
+    projects,
+    projectHostSetups,
     worktreeLineageById: {} as Record<string, WorktreeLineage>,
     updateSettings: vi.fn(),
     openSettingsTarget: vi.fn(),
