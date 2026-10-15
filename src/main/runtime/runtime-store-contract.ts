@@ -23,6 +23,7 @@ export type RuntimeStore = {
   updateProjectGroup?: Store['updateProjectGroup']
   deleteProjectGroup?: Store['deleteProjectGroup']
   moveProjectToGroup?: Store['moveProjectToGroup']
+  getFolderWorkspace?: Store['getFolderWorkspace']
   getFolderWorkspaces?: Store['getFolderWorkspaces']
   createFolderWorkspace?: Store['createFolderWorkspace']
   updateFolderWorkspace?: Store['updateFolderWorkspace']
@@ -62,6 +63,8 @@ export type RuntimeStore = {
   abortStagedOrcadMigrationCatalog?: Store['abortStagedOrcadMigrationCatalog']
   getOrcadMigrationCatalogState?: Store['getOrcadMigrationCatalogState']
   installOrcadMigrationReceivedBlobs?: Store['installOrcadMigrationReceivedBlobs']
+  installPendingOrcadMigrationReceivedBlobs?: Store['installPendingOrcadMigrationReceivedBlobs']
+  installDeferredOrcadMigrationShellHistory?: Store['installDeferredOrcadMigrationShellHistory']
   peekOrcadMigrationTerminalRestoreHint?: Store['peekOrcadMigrationTerminalRestoreHint']
   consumeOrcadMigrationTerminalRestoreHint?: Store['consumeOrcadMigrationTerminalRestoreHint']
   persistPtyBinding?: Store['persistPtyBinding']
@@ -86,6 +89,16 @@ export type RuntimeStore = {
   getMobileClientTabSelections?: Store['getMobileClientTabSelections']
   setMobileClientTabSelections?: Store['setMobileClientTabSelections']
   getSettings(): {
+    autoRenameBranchFromWork?: GlobalSettings['autoRenameBranchFromWork']
+    nativeChatAutoName?: GlobalSettings['nativeChatAutoName']
+    notifications?: GlobalSettings['notifications']
+    claudeManagedAccounts?: GlobalSettings['claudeManagedAccounts']
+    activeClaudeManagedAccountId?: GlobalSettings['activeClaudeManagedAccountId']
+    activeClaudeManagedAccountIdsByRuntime?: GlobalSettings['activeClaudeManagedAccountIdsByRuntime']
+    activeCodexManagedAccountId?: GlobalSettings['activeCodexManagedAccountId']
+    activeCodexManagedAccountIdsByRuntime?: GlobalSettings['activeCodexManagedAccountIdsByRuntime']
+    agentWorkspaceTrustEnabled?: GlobalSettings['agentWorkspaceTrustEnabled']
+    codexManagedAccounts?: GlobalSettings['codexManagedAccounts']
     nestedWorkerMaxDepth?: GlobalSettings['nestedWorkerMaxDepth']
     workspaceDir: string
     nestWorkspaces: boolean
@@ -107,6 +120,8 @@ export type RuntimeStore = {
     // Read by the launch-line carry rule to name the shell a local line is typed into.
     terminalDefaultShell?: GlobalSettings['terminalDefaultShell']
     floatingTerminalEnabled?: GlobalSettings['floatingTerminalEnabled']
+    floatingTerminalCwd?: GlobalSettings['floatingTerminalCwd']
+    floatingTerminalTrustedCwds?: GlobalSettings['floatingTerminalTrustedCwds']
     agentStatusHooksEnabled?: GlobalSettings['agentStatusHooksEnabled']
     terminalCopyTrimsGutter?: GlobalSettings['terminalCopyTrimsGutter']
     experimentalNativeChat?: GlobalSettings['experimentalNativeChat']

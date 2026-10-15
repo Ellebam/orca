@@ -162,6 +162,7 @@ export function createStructuredSessionMocks() {
     threadGoal: nullable<StructuredAgentSessionThreadGoal>(),
     stopBackgroundTask: vi.fn<StopBackgroundTaskSpy>(),
     hasOlder: false,
+    readCurrent: false,
     loadingOlder: false,
     olderHistoryGeneration: 0,
     loadOlder: vi.fn<() => Promise<NativeChatOlderPageResult>>(),
@@ -211,6 +212,7 @@ export function createStructuredSessionMocks() {
             error: null,
             readRefusal: mocks.readRefusal,
             hasOlder: mocks.hasOlder,
+            readCurrent: mocks.readCurrent,
             loadingOlder: mocks.loadingOlder,
             olderHistoryGeneration: mocks.olderHistoryGeneration,
             loadOlder: mocks.loadOlder,
@@ -398,6 +400,7 @@ export function createStructuredSessionMocks() {
     mocks.settledBackgroundTasks = []
     mocks.threadGoal = null
     mocks.hasOlder = false
+    mocks.readCurrent = false
     mocks.loadingOlder = false
     mocks.olderHistoryGeneration = 0
     mocks.loadOlder.mockReset()

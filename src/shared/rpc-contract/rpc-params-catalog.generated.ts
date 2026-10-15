@@ -315,6 +315,7 @@ import {
   HostedReviewCreationEligibility,
   HostedReviewForBranch
 } from './hosted-review-params'
+import { JiraFavouriteFilterParams } from './jira-favourite-filter-params'
 import {
   AssignableUsers,
   AttachmentImage,
@@ -1009,6 +1010,7 @@ export const RPC_PARAMS_BY_METHOD = {
   'jira.issueCommentsStream': IssueKey,
   'jira.listAssignableUsers': AssignableUsers,
   'jira.listCreateFields': ProjectIssueTypeFields,
+  'jira.listFavouriteFilters': JiraFavouriteFilterParams,
   'jira.listIssueTypes': ProjectIssueTypes,
   'jira.listIssues': ListIssues,
   'jira.listPriorities': SiteSelection,
@@ -1077,6 +1079,7 @@ export const RPC_PARAMS_BY_METHOD = {
   'markdown.saveTab': SaveMarkdownTab,
   'mobileRelay.hosts.list': null,
   'mobileRelay.hosts.worktrees': MobileRelayHostWorktreesParamsSchema,
+  'mobileRelay.projectSections': null,
   'mobileWeb.bundle.chunk': MobileWebBundleChunkParamsSchema,
   'mobileWeb.bundle.manifest': null,
   'mobileWeb.bundle.range': MobileWebBundleChunkParamsSchema,
