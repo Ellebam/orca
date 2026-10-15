@@ -141,13 +141,21 @@ describe('memoized worktree rows', () => {
 
   it.each([false, true])('names the owner once (Project mode: %s)', async (hideRepo) => {
     await act(async () => {
-      renderer = create(createElement(WorktreeListRow, {
-        item: { ...baseItem, projectContextLabel: 'Backend checkout', lineageDepth: 1 },
-        isReadOnly: false, now: 2_000, repoColor: '#000000', hideRepo,
-        status: 'active', onPress: () => undefined
-      }))
+      renderer = create(
+        createElement(WorktreeListRow, {
+          item: { ...baseItem, projectContextLabel: 'Backend checkout', lineageDepth: 1 },
+          isReadOnly: false,
+          now: 2_000,
+          repoColor: '#000000',
+          hideRepo,
+          status: 'active',
+          onPress: () => undefined
+        })
+      )
     })
-    const ownerNames = renderer!.root.findAllByType(Text).map((node) => node.props.children)
+    const ownerNames = renderer!.root
+      .findAllByType(Text)
+      .map((node) => node.props.children)
       .filter((text) => text === baseItem.repo || text === 'Backend checkout')
     expect(ownerNames).toEqual([hideRepo ? 'Backend checkout' : baseItem.repo])
   })

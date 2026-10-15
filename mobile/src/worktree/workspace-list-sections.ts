@@ -197,7 +197,8 @@ export function buildMobileWorkspacePlan(
     identityOf: getWorktreeRowIdentity,
     isPinned: (worktree) => isWorktreePinned(worktree, pinnedIds),
     duplicatePinned: showPinnedInGroups,
-    owningSectionOf: (worktree) => getProjectGroupingForRepo(worktree.repoId, repoMap, projectIndex),
+    owningSectionOf: (worktree) =>
+      getProjectGroupingForRepo(worktree.repoId, repoMap, projectIndex),
     sectionsOf: ({ pinned, natural: canonicalGroupWorktrees, displayRootByIdentity }) => {
       const sections: Section[] = []
       if (pinned.length > 0) {
@@ -224,7 +225,8 @@ export function buildMobileWorkspacePlan(
           buildProjectSections({
             items: canonicalGroupWorktrees,
             repoIdOf: (w) => w.repoId,
-            displayRepoIdOf: (w) => (displayRootByIdentity.get(getWorktreeRowIdentity(w)) ?? w).repoId,
+            displayRepoIdOf: (w) =>
+              (displayRootByIdentity.get(getWorktreeRowIdentity(w)) ?? w).repoId,
             repoMap,
             projectIndex,
             placeholderRepoIds,
@@ -234,7 +236,9 @@ export function buildMobileWorkspacePlan(
         )
         for (const [key, section] of projectSections) {
           sections.push(
-            makeSection(key, section.label, orderMainWorktreeFirst(section.items), { repo: section.repo })
+            makeSection(key, section.label, orderMainWorktreeFirst(section.items), {
+              repo: section.repo
+            })
           )
         }
       } else if (groupMode === 'workspaceStatus') {

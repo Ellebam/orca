@@ -169,7 +169,9 @@ describe('WorktreeCard host badge toggle', () => {
         const rows = buildRows(mode, trees, new Map([[owner.id, owner], [parentRepo.id, parentRepo]]),
           null, new Set(), undefined, undefined, undefined, graph, new Map(trees.map((row) => [row.id, row])), true)
         for (const row of rows) {
-          if (row.type !== 'item') continue
+          if (row.type !== 'item') {
+            continue
+          }
           const markup = await renderCardMarkup({ worktree: row.worktree, repo: row.repo,
             hideRepoBadge: mode === 'repo', inPinnedSection: row.sectionKey === PINNED_GROUP_KEY,
             projectContextLabel: row.projectContextLabel })
@@ -181,15 +183,4 @@ describe('WorktreeCard host badge toggle', () => {
       }
     }
   }, WORKTREE_CARD_IMPORT_TIMEOUT_MS)
-
-  it(
-    'keeps the parent-project context visible with host badges off',
-    async () => {
-      worktreeCardProperties = ['status']
-      const markup = await renderCardMarkup({ projectContextLabel: 'Other project', hideRepoBadge: true })
-      expect(markup).toContain('Other project')
-      expect(markup).not.toContain(HOST_LABEL)
-    },
-    WORKTREE_CARD_IMPORT_TIMEOUT_MS
-  )
 })

@@ -3,7 +3,12 @@ import {
   applyMobileWorkspaceLineage,
   getMobileWorkspaceLineageGroupKey
 } from './mobile-workspace-lineage'
-import { buildSections, buildMobileWorkspacePlan, NO_PROJECT_SECTION_CATALOG, type Worktree } from './workspace-list-sections'
+import {
+  buildSections,
+  buildMobileWorkspacePlan,
+  NO_PROJECT_SECTION_CATALOG,
+  type Worktree
+} from './workspace-list-sections'
 
 function worktree(overrides: Partial<Worktree> = {}): Worktree {
   return {
@@ -26,36 +31,77 @@ function worktree(overrides: Partial<Worktree> = {}): Worktree {
 }
 
 describe('applyMobileWorkspaceLineage', () => {
-  it.each([false, true])('keeps deep project identity in each occurrence (duplicate pins: %s)', (duplicate) => {
-    const parent = worktree({ worktreeId: 'parent', isPinned: true })
-    const child = worktree({
-      worktreeId: 'child', repoId: 'repo-2', repo: 'Backend', parentWorktreeId: parent.worktreeId
-    })
-    const grandchild = { ...child, worktreeId: 'grandchild', parentWorktreeId: child.worktreeId }
-    const filters = { filterRepoIds: new Set<string>(), hideSleeping: false, hideDefaultBranch: false }
-    const plan = buildMobileWorkspacePlan(
-      [grandchild, child, parent], 'name', filters, '', 'repo', new Set(),
-      NO_PROJECT_SECTION_CATALOG, undefined, undefined, duplicate
-    )
-    const collapsed = new Set([getMobileWorkspaceLineageGroupKey(parent)])
-    expect(plan.render(collapsed).flatMap((section) => section.data).map((row) => row.worktreeId))
-      .toEqual(duplicate ? ['parent', 'parent'] : ['parent'])
-    const sections = plan.render(new Set())
-    expect(sections.map((section) => section.data.map((row) => [
-      row.worktreeId, row.lineageDepth, row.projectContextLabel
-    ]))).toEqual([
-      [['parent', 0, 'orca'], ['child', 1, 'Backend'], ['grandchild', 2, 'Backend']],
-      ...(duplicate ? [[['parent', 0, undefined], ['child', 1, 'Backend'], ['grandchild', 2, 'Backend']]] : [])
-    ])
-    const keys = sections.flatMap((section) => section.data.map((row) => row.sectionListKey))
-    expect(new Set(keys).size).toBe(keys.length)
-    const filtered = buildSections(
-      [parent, child, { ...grandchild, repoId: 'repo-3' }], 'name',
-      { ...filters, filterRepoIds: new Set(['repo-1', 'repo-3']) }, '', 'repo', new Set()
-    )
-    expect(filtered.map((section) => [section.key, section.data.map((row) => [row.worktreeId, row.lineageDepth])]))
-      .toEqual([['pinned', [['parent', 0]]], ['repo:repo-3', [['grandchild', 0]]]])
-  })
+  it.each([false, true])(
+    'keeps deep project identity in each occurrence (duplicate pins: %s)',
+    (duplicate) => {
+      const parent = worktree({ worktreeId: 'parent', isPinned: true })
+      const child = worktree({
+        worktreeId: 'child',
+        repoId: 'repo-2',
+        repo: 'Backend',
+        parentWorktreeId: parent.worktreeId
+      })
+      const grandchild = { ...child, worktreeId: 'grandchild', parentWorktreeId: child.worktreeId }
+      const filters = {
+        filterRepoIds: new Set<string>(),
+        hideSleeping: false,
+        hideDefaultBranch: false
+      }
+      const plan = buildMobileWorkspacePlan(
+        [grandchild, child, parent],
+        'name',
+        filters,
+        '',
+        'repo',
+        new Set(),
+        NO_PROJECT_SECTION_CATALOG,
+        undefined,
+        undefined,
+        duplicate
+      )
+      const collapsed = new Set([getMobileWorkspaceLineageGroupKey(parent)])
+      expect(
+        plan
+          .render(collapsed)
+          .flatMap((section) => section.data)
+          .map((row) => row.worktreeId)
+      ).toEqual(duplicate ? ['parent', 'parent'] : ['parent'])
+      expect(plan.render(collapsed)[0]?.data[0]).toMatchObject({
+        lineageChildCount: 1,
+        lineageCollapsed: true
+      })
+      const sections = plan.render(new Set())
+      expect(sections).toHaveLength(duplicate ? 2 : 1)
+      for (const section of sections) {
+        expect(section.data.map((row) => row.worktreeId)).toEqual(['parent', 'child', 'grandchild'])
+        expect(section.data.map((row) => row.lineageDepth)).toEqual([0, 1, 2])
+        expect(section.data.map((row) => row.projectContextLabel)).toEqual([
+          section.key === 'pinned' ? 'orca' : undefined,
+          'Backend',
+          'Backend'
+        ])
+      }
+      const keys = sections.flatMap((section) => section.data.map((row) => row.sectionListKey))
+      expect(new Set(keys).size).toBe(keys.length)
+      const filtered = buildSections(
+        [parent, child, { ...grandchild, repoId: 'repo-3' }],
+        'name',
+        { ...filters, filterRepoIds: new Set(['repo-1', 'repo-3']) },
+        '',
+        'repo',
+        new Set()
+      )
+      expect(
+        filtered.map((section) => [
+          section.key,
+          section.data.map((row) => [row.worktreeId, row.lineageDepth])
+        ])
+      ).toEqual([
+        ['pinned', [['parent', 0]]],
+        ['repo:repo-3', [['grandchild', 0]]]
+      ])
+    }
+  )
 
   it('places a visible child from another project under its same-host parent', () => {
     const parent = worktree({
@@ -81,40 +127,6 @@ describe('applyMobileWorkspaceLineage', () => {
     expect(rows.map((row) => row.worktreeId)).toEqual(['parent', 'child'])
     expect(rows.map((row) => row.lineageDepth)).toEqual([0, 1])
     expect(rows[0]?.lineageChildCount).toBe(1)
-  })
-
-  it('supports nested lineage chains', () => {
-    const parent = worktree({ worktreeId: 'parent' })
-    const child = worktree({ worktreeId: 'child', parentWorktreeId: 'parent' })
-    const grandchild = worktree({ worktreeId: 'grandchild', parentWorktreeId: 'child' })
-
-    const rows = applyMobileWorkspaceLineage([grandchild, child, parent])
-
-    expect(rows.map((row) => row.worktreeId)).toEqual(['parent', 'child', 'grandchild'])
-    expect(rows.map((row) => row.lineageDepth)).toEqual([0, 1, 2])
-  })
-
-  it('collapses descendants under lineage parents', () => {
-    const parent = worktree({ worktreeId: 'parent' })
-    const child = worktree({ worktreeId: 'child', parentWorktreeId: 'parent' })
-
-    const rows = applyMobileWorkspaceLineage(
-      [child, parent],
-      new Set([getMobileWorkspaceLineageGroupKey(parent)])
-    )
-
-    expect(rows.map((row) => row.worktreeId)).toEqual(['parent'])
-    expect(rows[0]?.lineageChildCount).toBe(1)
-    expect(rows[0]?.lineageCollapsed).toBe(true)
-  })
-
-  it('keeps legacy host lineage nesting when instance ids are unavailable', () => {
-    const parent = worktree({ worktreeId: 'parent' })
-    const child = worktree({ worktreeId: 'child', parentWorktreeId: 'parent' })
-
-    const rows = applyMobileWorkspaceLineage([child, parent])
-
-    expect(rows.map((row) => row.worktreeId)).toEqual(['parent', 'child'])
   })
 
   it('does not nest stale lineage when instance ids no longer match', () => {

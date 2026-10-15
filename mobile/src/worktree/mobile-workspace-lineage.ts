@@ -63,9 +63,8 @@ export function getMobileOccurrenceRows(
   sectionKey: string,
   collapsedGroups: ReadonlySet<string>
 ): Worktree[] {
-  return getExpandedWorktreeOccurrences(
-    plan.bySection.get(sectionKey) ?? [],
-    (worktree) => collapsedGroups.has(getMobileWorkspaceLineageGroupKey(worktree))
+  return getExpandedWorktreeOccurrences(plan.bySection.get(sectionKey) ?? [], (worktree) =>
+    collapsedGroups.has(getMobileWorkspaceLineageGroupKey(worktree))
   ).map((occurrence) => ({
     ...occurrence.row,
     sectionListKey: occurrence.key,

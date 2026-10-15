@@ -119,7 +119,9 @@ describe('cross-project sidebar lineage', () => {
         pinnedDisplayPolicy: policy, prCache: null, workspaceStatuses: [], settings: null,
         projectGroups: [group]
       })
-      for (const key of keys) collapsedGroups.delete(key)
+      for (const key of keys) {
+        collapsedGroups.delete(key)
+      }
       const rendered = plan.render(collapsedGroups).filter((row) => row.type === 'item')
       expect(rendered.map((row) => row.worktree.id)).toEqual([parent.id, child.id, grandchild.id])
       expect(rendered[2]?.occurrence).toBe(occurrence)
