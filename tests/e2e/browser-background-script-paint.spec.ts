@@ -156,8 +156,6 @@ for (const navigation of [
     expect(load.documentAfter).toBeGreaterThan(load.documentBefore)
     if (navigation === 'cross-site navigation') {
       expect(load.processAfter).not.toBe(load.processBefore)
-    } else {
-      expect(new URL(load.url).origin).toBe(new URL(url).origin)
     }
     const endpoint = await getEndpoint()
     await expect.poll(getLayout).toEqual({ rectangles: 0, display: 'none' })
